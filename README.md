@@ -1,4 +1,7 @@
-# CS50 Final Project: Stock Exchange
+# Stock Exchange Prototype
+
+## Part 1: CS50 Final project
+Originally this project as a part of the course "CS50" at the Harvard University. 
 
 #### Video Demo: https://youtu.be/vo_BSJMRFsM
 
@@ -170,3 +173,10 @@ $ ./client_s
 
 ##### Logs
 Each application prints logs in the stdout to verify its operation and provide some visibility for users. Arguably, in production many logs can be truncated as printing to stdout is a costly operation. 
+
+## Part 2: Life after CS50
+After the course was finished, it was decided to continue the development of the project and make it more realistic. Stay tuned.
+
+### after-cs50-1 sprint
+- Replace `inet_addr` to `inet_pton` to provide IPv4/IPv6 support.
+- Introduce `perror` to print the error messages.
