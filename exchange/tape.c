@@ -4,12 +4,11 @@
 #include <stdint.h>
 #include <string.h>
 #include <stdbool.h>
-#include <unistd.h>     // used for sleep function
-#include <time.h>       // used for timestamp
-#include <sys/socket.h> // used for socket functions
-#include <arpa/inet.h>  // used for inet_addr function
-#include <linux/in.h>
-#include <unistd.h> // close function
+#include <time.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <unistd.h>
 #include <hiredis/hiredis.h>
 
 // Local headers
@@ -59,7 +58,10 @@ int main(int argc, char *argv[])
     struct sockaddr_in server_addr;
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(addr_mcast->port);
-    server_addr.sin_addr.s_addr = inet_addr(addr_mcast->ip);
+    if (inet_pton(AF_INET, addr_mcast->ip, &server_addr.sin_addr) < 0)
+    {
+        perror("Error: ");
+    }
     unsigned int server_struct_length = sizeof(server_addr);
 
     // Start loop for generating and sending messages
