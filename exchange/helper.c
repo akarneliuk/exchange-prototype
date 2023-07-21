@@ -191,6 +191,12 @@ server_t *get_server(char *env_ip, char *env_port, uint64_t protocol)
 
     // Allocate memory for server
     server_t *server = malloc(sizeof(server_t));
+    if (server == NULL)
+    {
+        printf("%lu: Unable to allocate memory for server\n", time(NULL));
+        exit(100);
+    }
+    memset(server, 0, sizeof(server_t));
 
     // Get server IP
     char *ip = getenv(env_ip);

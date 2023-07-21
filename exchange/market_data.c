@@ -47,6 +47,7 @@ int main(int argc, char *argv[])
 
     // Specify socket to a specific interface
     struct in_addr addr;
+    memset(&addr, 0, sizeof(addr));
     addr.s_addr = inet_addr(addr_mcast_source->ip);
     if (setsockopt(sd, IPPROTO_IP, IP_MULTICAST_IF, &addr, sizeof(addr)) < 0)
     {
@@ -56,13 +57,14 @@ int main(int argc, char *argv[])
 
     // Initialize server address (Destination IP and port)
     struct sockaddr_in server_addr;
+    memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(addr_mcast->port);
     if (inet_pton(AF_INET, addr_mcast->ip, &server_addr.sin_addr) < 0)
     {
         perror("Error: ");
     }
-    unsigned int server_struct_length = sizeof(server_addr);
+    uint64_t server_struct_length = sizeof(server_addr);
 
     // Start loop for generating and sending messages
     printf("EXECHANGE IS OPENED! TRADING STARTED!\n");
