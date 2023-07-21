@@ -214,7 +214,8 @@ server_t *get_server(char *env_ip, char *env_port, uint64_t protocol)
         printf("EXCHANGE_ORDER_PORT environment variable not set\n");
         exit(1);
     }
-    server->port = atoi(port);
+    server->port = strtol(port, NULL, 10);
+    // server->port = atoi(port);
 
     // Set the protocol
     server->protocol = protocol;

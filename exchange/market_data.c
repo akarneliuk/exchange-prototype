@@ -66,9 +66,6 @@ int main(int argc, char *argv[])
     }
     uint64_t server_struct_length = sizeof(server_addr);
 
-    // Start loop for generating and sending messages
-    printf("EXECHANGE IS OPENED! TRADING STARTED!\n");
-
     // Open connection to Redis
     redisContext *red_con = redisConnect(addr_redis->ip, addr_redis->port);
     if (red_con != NULL && red_con->err)
@@ -80,6 +77,13 @@ int main(int argc, char *argv[])
 
     // Initialize msg coounter
     uint64_t msg_counter = 0;
+
+    // Start loop for generating and sending messages
+    printf("EXECHANGE IS OPENED! TRADING STARTED!\n");
+    printf("Sending data at %s @ %lu/%lu\n",
+           addr_mcast->ip,
+           addr_mcast->port,
+           addr_mcast->protocol);
 
     // Server execution loop
     while (true)
