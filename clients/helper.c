@@ -76,7 +76,7 @@ server_t *get_server(char *env_ip, char *env_port, uint64_t protocol)
     char *ip = getenv(env_ip);
     if (ip == NULL)
     {
-        printf("EXCHANGE_ORDER_IP environment variable not set\n");
+        printf("%s: Load error: EXCHANGE_ORDER_IP environment variable not set\n", get_human_readable_time());
         exit(1);
     }
     strncpy(server->ip, ip, 15);
@@ -85,7 +85,7 @@ server_t *get_server(char *env_ip, char *env_port, uint64_t protocol)
     char *port = getenv(env_port);
     if (port == NULL)
     {
-        printf("EXCHANGE_ORDER_PORT environment variable not set\n");
+        printf("%s: Load error: EXCHANGE_ORDER_PORT environment variable not set\n", get_human_readable_time());
         exit(1);
     }
     server->port = atoi(port);
@@ -107,7 +107,7 @@ order_t *get_orders_from_tape(char *tape)
     order_t *order = malloc(sizeof(order_t));
     if (order == NULL)
     {
-        printf("%lu: Unable to allocate memory for order\n", time(NULL));
+        printf("%s: Unable to allocate memory for order\n", get_human_readable_time());
         return NULL;
     }
     memset(order->symbol, '\0', sizeof(order->symbol));
@@ -162,7 +162,7 @@ order_t *get_orders_from_tape(char *tape)
                 order_t *new_order = malloc(sizeof(order_t));
                 if (new_order == NULL)
                 {
-                    printf("%lu: Unable to allocate memory for order\n", time(NULL));
+                    printf("%s: Unable to allocate memory for order\n", get_human_readable_time());
                     free_order_list(head);
                     return NULL;
                 }
@@ -328,6 +328,16 @@ void print_order_from_redis(uint64_t my_or_all)
     server_t *addr_redis = get_server("REDIS_IP", "REDIS_PORT", IPPROTO_TCP);
     redisContext *red_con = redisConnect(addr_redis->ip, addr_redis->port);
 
+    // Check connection to Redis
+    if (red_con->err > 0)
+    {
+        // Get human readable time
+        printf("%s: Redis error: %s\n", get_human_readable_time(), red_con->errstr);
+        redisFree(red_con);
+        free(addr_redis);
+        exit(1);
+    }
+
     // Select scope to collect orders
     char redis_request[100];
     memset(redis_request, '\0', sizeof(redis_request));
@@ -403,7 +413,7 @@ order_t *deserialize_exhange_confirmation(char *msg)
     order_t *order = malloc(sizeof(order_t));
     if (order == NULL)
     {
-        printf("%lu: Unable to allocate memory for order\n", time(NULL));
+        printf("%s: Unable to allocate memory for order\n", get_human_readable_time());
         return NULL;
     }
 
@@ -451,16 +461,26 @@ uint64_t process_completed_order_redis(redisContext *red_con, order_t *order)
                                         order->oid);
     if (red_rep1->str != NULL)
     {
-        printf("%lu: Unable to delete order %lu from mine in Redis: %s\n", time(NULL), order->oid, red_rep1->str);
+        printf("%s: Unable to delete order %lu from mine in Redis: %s\n", get_human_readable_time(), order->oid, red_rep1->str);
         freeReplyObject(red_rep1);
         return 1;
     }
     else
     {
-        printf("%lu: Order %lu is delete from mine in Redis.\n", time(NULL), order->oid);
+        printf("%s: Order %lu is delete from mine in Redis.\n", get_human_readable_time(), order->oid);
     }
     freeReplyObject(red_rep1);
 
     // Return success
     return 0;
+}
+
+char *get_human_readable_time()
+{
+    /* Helper function to get human readable time*/
+    int64_t t = time(NULL);
+    char *time_str = ctime(&t);
+    time_str[strlen(time_str) - 1] = '\0';
+
+    return time_str;
 }

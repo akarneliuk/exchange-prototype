@@ -78,6 +78,12 @@ order_t *process_cli_args(int argc, char *argv[])
         }
 
         order_t *order = malloc(sizeof(order_t));
+        if (order == NULL)
+        {
+            printf("ERROR: Unable to allocate memory for order\n");
+            exit(100);
+        }
+        memset(order, 0, sizeof(order_t));
         memset(order->symbol, '\0', sizeof(order->symbol));
 
         order->t_client = time(NULL);
@@ -96,6 +102,12 @@ order_t *process_cli_args(int argc, char *argv[])
     else if (argc == 3 && strncmp(argv[1], "cancel", 6) == 0 && atoi(argv[2]) > 0)
     {
         order_t *order = malloc(sizeof(order_t));
+        if (order == NULL)
+        {
+            printf("ERROR: Unable to allocate memory for order\n");
+            exit(100);
+        }
+        memset(order, 0, sizeof(order_t));
         order->t_client = time(NULL);
         order->operation = get_operation(argv[1]);
         order->oid = atol(argv[2]);
