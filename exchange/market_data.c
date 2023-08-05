@@ -103,11 +103,11 @@ int main(int argc, char *argv[])
         red_reply = redisCommand(red_con, "HKEYS %s", REDIS_EXCHANGE_A_ORDERS);
         if (red_reply->elements == 0)
         {
-            sprintf(msg, "%lu:%lu:;", get_time_nanoseconds_since_midnight(time_midnight), msg_counter);
+            sprintf(msg, "%lu:%lu:;", msg_counter, get_time_nanoseconds_since_midnight(time_midnight));
         }
         else
         {
-            sprintf(msg, "%lu:%lu:", time(NULL), msg_counter);
+            sprintf(msg, "%lu:%lu:", msg_counter, get_time_nanoseconds_since_midnight(time_midnight));
             for (int i = 0; i < red_reply->elements; i++)
             {
                 redisReply *redis_reply_order = redisCommand(red_con, "HVALS %s:%s", REDIS_EXCHANGE_ORDER_PREFIX, red_reply->element[i]->str);

@@ -104,13 +104,12 @@ order_t *get_orders_from_tape(char *tape)
     uint64_t t_server = 0;
 
     // Allocate memory for order and initialize values to 0/NULL
-    order_t *order = malloc(sizeof(order_t));
+    order_t *order = calloc(1, sizeof(order_t));
     if (order == NULL)
     {
         printf("%s: Unable to allocate memory for order\n", get_human_readable_time());
         return NULL;
     }
-    memset(order->symbol, '\0', sizeof(order->symbol));
     order->next = NULL;
 
     // Allocate buffer
@@ -137,7 +136,7 @@ order_t *get_orders_from_tape(char *tape)
         else
         {
             // Pickup the timestamp
-            if (msg_pos == 0)
+            if (msg_pos == 1)
             {
                 t_server = strtoul(buffer, NULL, 10);
             }
