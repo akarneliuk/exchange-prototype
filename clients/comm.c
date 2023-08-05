@@ -69,7 +69,6 @@ uint64_t send_order(char *client_id, order_t *order, server_t *server)
     printf("%lu: Exchange's response: %s\n", time(NULL), server_message);
 
     // Analyze exchange's response
-    char r = server_message[0];
     int n = strlen(server_message);
     char *read_buffer = calloc(1, n * sizeof(char));
 
@@ -78,7 +77,7 @@ uint64_t send_order(char *client_id, order_t *order, server_t *server)
         // If delimeter is found, convert to digits what is so far parsed
         if (server_message[i] == ':')
         {
-            order->t_server = atol(read_buffer);
+            order->t_server = strtol(read_buffer, NULL, 10);
 
             // free the buffer and re-allocate it again
             free(read_buffer);
@@ -89,7 +88,7 @@ uint64_t send_order(char *client_id, order_t *order, server_t *server)
             strncat(read_buffer, &server_message[i], 1);
         }
     }
-    order->oid = atol(read_buffer);
+    order->oid = strtol(read_buffer, NULL, 10);
 
     if (order->t_server == 3833738885019939885 || order->oid == 1688241182)
     {

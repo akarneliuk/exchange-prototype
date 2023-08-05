@@ -200,7 +200,7 @@ void free_order_list(order_t *order)
     }
 }
 
-uint64_t add_order_to_redis(redisContext *red_con, order_t *order, uint64_t my_or_all)
+int64_t add_order_to_redis(redisContext *red_con, order_t *order, uint64_t my_or_all)
 {
     /* Helper function to add active order to redis*/
 
@@ -219,7 +219,7 @@ uint64_t add_order_to_redis(redisContext *red_con, order_t *order, uint64_t my_o
     {
         printf("%lu: Unable to create order %lu details in Redis: %s\n", time(NULL), order->oid, red_rep1->str);
         freeReplyObject(red_rep1);
-        return 1;
+        return -1;
     }
     else
     {
@@ -253,7 +253,7 @@ uint64_t add_order_to_redis(redisContext *red_con, order_t *order, uint64_t my_o
     {
         printf("%lu: Unable to add order %lu to the active queue in Redis: %s\n", time(NULL), order->oid, red_rep2->str);
         freeReplyObject(red_rep2);
-        return 1;
+        return -1;
     }
     else
     {
@@ -265,7 +265,7 @@ uint64_t add_order_to_redis(redisContext *red_con, order_t *order, uint64_t my_o
     return 0;
 }
 
-uint64_t delete_inactive_quotes_from_redis(redisContext *red_con, uint64_t last_time)
+int64_t delete_inactive_quotes_from_redis(redisContext *red_con, uint64_t last_time)
 {
     /* Helper function to remove inactive order from redis*/
 
@@ -276,7 +276,7 @@ uint64_t delete_inactive_quotes_from_redis(redisContext *red_con, uint64_t last_
     {
         printf("%lu: Unable to get orders' list in Redis: %s\n", time(NULL), red_rep1->str);
         freeReplyObject(red_rep1);
-        return 1;
+        return -1;
     }
     else
     {
@@ -287,7 +287,7 @@ uint64_t delete_inactive_quotes_from_redis(redisContext *red_con, uint64_t last_
     for (uint64_t i = 0; i < red_rep1->elements; i += 2)
     {
         // Check delete element if timestamp is less than last_time
-        if (atol(red_rep1->element[i + 1]->str) != last_time)
+        if ((uint64_t)strtol(red_rep1->element[i + 1]->str, NULL, 10) != last_time)
         {
             printf("HDEL %s %s\n",
                    REDIS_CUSTOMER_ALL_ORDERS,
@@ -300,7 +300,7 @@ uint64_t delete_inactive_quotes_from_redis(redisContext *red_con, uint64_t last_
             {
                 printf("%lu: Unable to delete order fro, Redis: %s\n", time(NULL), red_rep2->str);
                 freeReplyObject(red_rep2);
-                return 1;
+                return -1;
             }
             else
             {
@@ -383,13 +383,13 @@ void print_order_from_redis(uint64_t my_or_all)
         {
             char op_text[10];
             memset(op_text, '\0', sizeof(op_text));
-            if (atol(red_rep2->element[3]->str) == 0)
+            if (strtol(red_rep2->element[3]->str, NULL, 10) == 0)
             {
-                strncpy(op_text, "SELL", 4);
+                memcpy(op_text, "SELL", 4);
             }
             else
             {
-                strncpy(op_text, "BUY", 3);
+                memcpy(op_text, "BUY", 3);
             }
 
             printf("  - symbol:          %s\n    operation:       %s\n    price per share: %s\n    quantity:        %s\n\n",

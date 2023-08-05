@@ -180,3 +180,7 @@ After the course was finished, it was decided to continue the development of the
 ### after-cs50-1 sprint
 - Replace `inet_addr` to `inet_pton` to provide IPv4/IPv6 support.
 - Introduce `perror` to print the error messages.
+- Replace time functions to `clock_gettime` to provide nanosecond precision.
+- Replace `malloc()` with `calloc()` to initialize the memory with zeros where appropriate.
+- Add `memset()` upon all structs initialization to zero all values.
+- Rename `tape` to `market_data` to be more consistent with the terminology.

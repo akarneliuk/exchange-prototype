@@ -37,10 +37,10 @@ int main(int argc, char *argv[])
     server_t *addr_mcast_source = get_server("EXCHANGE_TAPE_SOURCE_IP", "EXCHANGE_TAPE_PORT", EXCHANGE_MCAST_PROTOCOL);
 
     // Initialize socket
-    int sd = socket(AF_INET, SOCK_DGRAM, addr_mcast->protocol);
+    int64_t sd = socket(AF_INET, SOCK_DGRAM, addr_mcast->protocol);
     if (sd < 0)
     {
-        printf("%lu: Unable to create socket\n", time(NULL));
+        perror("Error: Cannot create socket: ");
         return 10;
     }
     printf("%lu: Socket created successfully\n", time(NULL));
@@ -51,7 +51,7 @@ int main(int argc, char *argv[])
     addr.s_addr = inet_addr(addr_mcast_source->ip);
     if (setsockopt(sd, IPPROTO_IP, IP_MULTICAST_IF, &addr, sizeof(addr)) < 0)
     {
-        perror("Setting IP_MULTICAST_IF error");
+        perror("Error: Cannot set socket option: ");
         return 12;
     }
 
@@ -62,9 +62,8 @@ int main(int argc, char *argv[])
     server_addr.sin_port = htons(addr_mcast->port);
     if (inet_pton(AF_INET, addr_mcast->ip, &server_addr.sin_addr) < 0)
     {
-        perror("Error: ");
+        perror("Error: Uncompatible IP Address: ");
     }
-    uint64_t server_struct_length = sizeof(server_addr);
 
     // Open connection to Redis
     redisContext *red_con = redisConnect(addr_redis->ip, addr_redis->port);
@@ -85,6 +84,14 @@ int main(int argc, char *argv[])
            addr_mcast->port,
            addr_mcast->protocol);
 
+    // Get timestamp for the midnight
+    int64_t time_midnight = get_time_nanoseconds_midnight();
+    if (time_midnight < 0)
+    {
+        perror("Error: Cannot get time for midnight");
+        return 1;
+    }
+
     // Server execution loop
     while (true)
     {
@@ -96,7 +103,7 @@ int main(int argc, char *argv[])
         red_reply = redisCommand(red_con, "HKEYS %s", REDIS_EXCHANGE_A_ORDERS);
         if (red_reply->elements == 0)
         {
-            sprintf(msg, "%lu:%lu:;", time(NULL), msg_counter);
+            sprintf(msg, "%lu:%lu:;", get_time_nanoseconds_since_midnight(time_midnight), msg_counter);
         }
         else
         {
@@ -137,7 +144,7 @@ int main(int argc, char *argv[])
         freeReplyObject(red_reply);
 
         // Send multicast message to the exchange clients
-        if (sendto(sd, msg, strlen(msg), 0, (struct sockaddr *)&server_addr, server_struct_length) < 0)
+        if (sendto(sd, msg, strlen(msg), 0, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
         {
             printf("%lu: Unable to send multicast message\n", time(NULL));
             return 11;

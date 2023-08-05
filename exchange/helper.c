@@ -190,13 +190,12 @@ server_t *get_server(char *env_ip, char *env_port, uint64_t protocol)
     /* Helper function to get server details from environment variables*/
 
     // Allocate memory for server
-    server_t *server = malloc(sizeof(server_t));
+    server_t *server = calloc(1, sizeof(server_t));
     if (server == NULL)
     {
         printf("%lu: Unable to allocate memory for server\n", time(NULL));
         exit(100);
     }
-    memset(server, 0, sizeof(server_t));
 
     // Get server IP
     char *ip = getenv(env_ip);
@@ -205,7 +204,7 @@ server_t *get_server(char *env_ip, char *env_port, uint64_t protocol)
         printf("EXCHANGE_ORDER_IP environment variable not set\n");
         exit(1);
     }
-    strncpy(server->ip, ip, 15);
+    memcpy(server->ip, ip, 15);
 
     // Get server port
     char *port = getenv(env_port);
@@ -275,4 +274,42 @@ uint64_t move_orders_to_exec_queue_redis(redisContext *red_con, order_t *orders)
 
     // return success
     return 0;
+}
+
+int64_t get_time_nanoseconds_midnight()
+{
+    /* Helper function to get time in nanoseconds at the midnight this day.
+       Return `-1` in case of errors.*/
+
+    // Get current time in struct
+    time_t now = time(NULL);
+    struct tm now_st = *localtime(&now);
+
+    // Erase hours, minutes, seconds
+    now_st.tm_hour = 0;
+    now_st.tm_min = 0;
+    now_st.tm_sec = 0;
+
+    // Create timestamp in seconds for midnight
+    time_t midnight = mktime(&now_st);
+
+    // Return timestamp
+    return midnight * 1000000000;
+}
+
+int64_t get_time_nanoseconds_since_midnight(int64_t midnigt)
+{
+    /* Helper function to get time in nanoseconds since midnight, take timestamp of midnight as input.
+       Return `-1` in case of errors.*/
+
+    struct timespec tv;
+    memset(&tv, 0, sizeof(tv));
+
+    if (clock_gettime(CLOCK_REALTIME, &tv))
+    {
+        perror("Error: Cannot execute clock_gettime: ");
+        return -1;
+    }
+
+    return tv.tv_sec * 1000000000 + tv.tv_nsec - midnigt;
 }
