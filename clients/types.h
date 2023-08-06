@@ -8,6 +8,7 @@
 #define REDIS_CUSTOMER_ALL_ORDERS "customer_all_orders"
 #define REDIS_CUSTOMER_MY_ORDERS "customer_my_orders"
 #define REDIS_CUSTOMER_ORDER_PREFIX "c-order"
+#define LISTENQ 100
 
 // Data types
 #ifndef _MY_HEADER_H_

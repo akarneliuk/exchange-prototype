@@ -46,8 +46,8 @@ void update_cid_ip(cid_ip_t *cid_ip_map, char *cid, char *ip, redisContext *red_
     // Check if the existing mapping is blank
     if (head->cid[0] == '\0')
     {
-        strcpy(head->cid, cid);
-        strcpy(head->ip, ip);
+        memcpy(head->cid, cid, 36);
+        memcpy(head->ip, ip, 15);
 
         is_updated = true;
     }
@@ -55,7 +55,7 @@ void update_cid_ip(cid_ip_t *cid_ip_map, char *cid, char *ip, redisContext *red_
     else
     {
         // Check if the current client id is this
-        while (strcmp(head->cid, cid) != 0)
+        while (memcmp(head->cid, cid, 36) != 0)
         {
             // Check if the next mapping doesn't exist
             if (head->next == NULL)
@@ -65,11 +65,11 @@ void update_cid_ip(cid_ip_t *cid_ip_map, char *cid, char *ip, redisContext *red_
 
                 // Set Customer ID in new mapping
                 head->next->cid = calloc(37, sizeof(char));
-                strncpy(head->next->cid, cid, 36);
+                memcpy(head->next->cid, cid, 36);
 
                 // Set Customer IP in new mapping
                 head->next->ip = calloc(16, sizeof(char));
-                strncpy(head->next->ip, ip, 15);
+                memcpy(head->next->ip, ip, 15);
 
                 head->next->next = NULL;
 
@@ -89,6 +89,7 @@ void update_cid_ip(cid_ip_t *cid_ip_map, char *cid, char *ip, redisContext *red_
 
         // Update the mapping in Redis
         redisReply *red_rep = redisCommand(red_con, "HSET %s %s %s", REDIS_EXCHANGE_C2IP, cid, ip);
+        freeReplyObject(red_rep);
     }
 }
 

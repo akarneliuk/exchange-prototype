@@ -25,16 +25,20 @@ uint64_t receive_orders(
     redisContext *red_con)
 {
     // Initialize order number
-    u_int64_t order_number = orders;
+    uint64_t order_number = orders;
+
+    // Get midnight time
+    uint64_t time_midnight = get_time_nanoseconds_midnight();
 
     // Initialize socket
     int64_t sd = socket(AF_INET, SOCK_STREAM, addr_order->protocol);
     if (sd < 0)
     {
-        printf("%lu: Unable to create socket\n", time(NULL));
-        return 10;
+        perror("Error: Cannot create socket: ");
+        return 1;
     }
-    printf("%lu: Socket created successfully\n", time(NULL));
+    printf("%lu: Socket created successfully\n",
+           get_time_nanoseconds_since_midnight(time_midnight));
 
     // Initialize message buffer
     char server_message[MAX_MSG_LEN], client_message[MAX_MSG_LEN];
@@ -43,25 +47,46 @@ uint64_t receive_orders(
 
     // Initialize server address (Destination IP and port, what this server is listening on)
     struct sockaddr_in server_addr;
+    memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(addr_order->port);
-    server_addr.sin_addr.s_addr = inet_addr(addr_order->ip);
+    if (inet_pton(AF_INET, addr_order->ip, &server_addr.sin_addr) < 0)
+    {
+        perror("Error: Uncompatible IP Address: ");
+        return 2;
+    }
+
+    // Allow reusing IP address to cater for process crashes/restarts
+    uint64_t so_reuseaddr = 1;
+    if (setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, &so_reuseaddr, sizeof(so_reuseaddr)) < 0)
+    {
+        perror("Error: Cannot set socket option: ");
+        return 3;
+    }
 
     // Bind socket to port
     if (bind(sd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
     {
-        printf("%lu: Unable to bind socket to to %s at %lu/%lu.\n", time(NULL), addr_order->ip, addr_order->port, addr_order->protocol);
-        return 11;
+        perror("Error: Cannot bind socket: ");
+        return 4;
     }
-    printf("%lu: Socket binded successfully %s at %lu/%lu.\n", time(NULL), addr_order->ip, addr_order->port, addr_order->protocol);
+    printf("%lu: Socket binded successfully %s at %lu/%lu.\n",
+           get_time_nanoseconds_since_midnight(time_midnight),
+           addr_order->ip,
+           addr_order->port,
+           addr_order->protocol);
 
     // Listen for incoming connections
     if (listen(sd, 1) < 0)
     {
-        printf("%lu: Unable to listen on %s at %lu/%lu.\n", time(NULL), addr_order->ip, addr_order->port, addr_order->protocol);
-        return 12;
+        perror("Error: Cannot listen on socket: ");
+        return 5;
     }
-    printf("%lu: Start Listening on %s at %lu/%lu.\n", time(NULL), addr_order->ip, addr_order->port, addr_order->protocol);
+    printf("%lu: Start Listening on %s at %lu/%lu.\n",
+           get_time_nanoseconds_since_midnight(time_midnight),
+           addr_order->ip,
+           addr_order->port,
+           addr_order->protocol);
 
     // Continously receive orders
     while (1)
@@ -75,27 +100,49 @@ uint64_t receive_orders(
         int64_t csd = accept(sd, (struct sockaddr *)&client_addr, &client_size);
         if (csd < 0)
         {
-            printf("%lu: Unable to accept connection on %s at %lu/%lu.\n", time(NULL), addr_order->ip, addr_order->port, addr_order->protocol);
-            return 13;
+            printf("%lu: Unable to accept connection on %s at %lu/%lu.\n",
+                   get_time_nanoseconds_since_midnight(time_midnight),
+                   addr_order->ip,
+                   addr_order->port,
+                   addr_order->protocol);
+            return 6;
         }
-        printf("%lu: Recived order from %s on %i/%lu\n", time(NULL), inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port), addr_order->protocol);
+
+        // Get IP of connected host
+        char received_ip[INET_ADDRSTRLEN];
+        memset(received_ip, 0, sizeof(received_ip));
+        if (inet_ntop(AF_INET, &client_addr.sin_addr, received_ip, INET_ADDRSTRLEN) == NULL)
+        {
+            perror("Error: Uncompatible IP Address: ");
+            return 7;
+        }
+
+        printf("%lu: Recived order from %s on %i/%lu\n",
+               get_time_nanoseconds_since_midnight(time_midnight),
+               received_ip,
+               ntohs(client_addr.sin_port),
+               addr_order->protocol);
 
         // Recieve order from client
         if (recv(csd, client_message, sizeof(client_message), 0) < 0)
         {
-            printf("%lu: Couldn't receive\n", time(NULL));
+            printf("%lu: Couldn't receive\n",
+                   get_time_nanoseconds_since_midnight(time_midnight));
             return 14;
         }
-        printf("%lu: Order from client: %s\n", time(NULL), client_message);
+        printf("%lu: Order from client: %s\n",
+               get_time_nanoseconds_since_midnight(time_midnight),
+               client_message);
 
         // Update CID to IP mapping
         char *order_customer_id = get_customer_id(client_message);
         if (order_customer_id == NULL)
         {
-            printf("%lu: Unable to extract customer id from order\n", time(NULL));
+            printf("%lu: Unable to extract customer id from order\n",
+                   get_time_nanoseconds_since_midnight(time_midnight));
             return 14;
         }
-        update_cid_ip(cid_ip_map, order_customer_id, inet_ntoa(client_addr.sin_addr), red_con);
+        update_cid_ip(cid_ip_map, order_customer_id, received_ip, red_con);
 
         // Read clients order from wire
         order_t *order = deserialize_order_wire(client_message, order_number);
@@ -105,10 +152,15 @@ uint64_t receive_orders(
 
         if (send(csd, server_message, strlen(server_message), 0) < 0)
         {
-            printf("%lu: Can't send response to client\n", time(NULL));
+            printf("%lu: Can't send response to client\n",
+                   get_time_nanoseconds_since_midnight(time_midnight));
             return 15;
         }
-        printf("%lu: Confirmation send to %s on %hu/%lu\n", time(NULL), inet_ntoa(client_addr.sin_addr), htons(client_addr.sin_port), addr_order->protocol);
+        printf("%lu: Confirmation send to %s on %hu/%lu\n",
+               get_time_nanoseconds_since_midnight(time_midnight),
+               received_ip,
+               htons(client_addr.sin_port),
+               addr_order->protocol);
 
         // Close client socket
         close(csd);

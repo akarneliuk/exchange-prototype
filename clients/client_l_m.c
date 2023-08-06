@@ -31,7 +31,7 @@ int main(void)
     if (sd < 0)
     {
         perror("Error: Cannot create socket: ");
-        return 10;
+        return 1;
     }
     printf("%s: Socket created successfully\n", get_human_readable_time());
 
@@ -43,6 +43,7 @@ int main(void)
     if (inet_pton(AF_INET, addr_mcast->ip, &server_addr.sin_addr) < 0)
     {
         perror("Error: Uncompatible IP Address: ");
+        return 2;
     }
 
     // Initialize client address
@@ -55,14 +56,14 @@ int main(void)
     if (setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, &so_reuseaddr, sizeof(so_reuseaddr)) < 0)
     {
         perror("Error: Cannot set socket option: ");
-        return 1;
+        return 3;
     }
 
     // Bind to the set port and IP:
     if (bind(sd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
     {
         perror("Error: Cannot bind port: ");
-        return 11;
+        return 4;
     }
     printf("%s, Done with binding of %lu/%lu at %s\n",
            get_human_readable_time(),
@@ -89,7 +90,7 @@ int main(void)
     if (setsockopt(sd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq)) < 0)
     {
         perror("Error: Cannot join multicast group: ");
-        return 12;
+        return 5;
     }
 
     // Setup connection to Redis
@@ -97,7 +98,7 @@ int main(void)
     if (red_con != NULL && red_con->err)
     {
         printf("%s: App Error: %s\n", get_human_readable_time(), red_con->errstr);
-        return 19;
+        return 6;
     }
     printf("%s: Connected to Redis\n", get_human_readable_time());
 
@@ -114,13 +115,22 @@ int main(void)
                      (struct sockaddr *)&client_addr, &client_struct_length) < 0)
         {
             perror("Error: Cannot receive message: ");
-            return 4;
+            return 7;
         }
 
-        // Print message
+        // Get exchange IP
+        char exchange_ip[INET_ADDRSTRLEN];
+        memset(exchange_ip, '\0', sizeof(exchange_ip));
+        if (inet_ntop(AF_INET, &(client_addr.sin_addr), exchange_ip, INET_ADDRSTRLEN) == NULL)
+        {
+            perror("Error: Cannot get IP Address of exchange: ");
+            return 8;
+        }
+
+        // Print received message
         printf("%s: Received message from %s:%d\n",
                get_human_readable_time(),
-               inet_ntoa(client_addr.sin_addr),
+               exchange_ip,
                ntohs(client_addr.sin_port));
 
         printf("Content: %s\n", client_message);
@@ -136,7 +146,7 @@ int main(void)
             if (add_order_to_redis(red_con, head, 0) < 0)
             {
                 perror("Error: Cannot update quotes: ");
-                return 5;
+                return 8;
             }
 
             head = head->next;
@@ -157,7 +167,7 @@ int main(void)
         if (delete_inactive_quotes_from_redis(red_con, last_time) < 0)
         {
             perror("Error: Cannot delete obsolte quotes: ");
-            return 6;
+            return 9;
         }
 
         // Clean memory for new message

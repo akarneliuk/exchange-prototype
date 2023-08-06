@@ -2,6 +2,7 @@
 
 // Preprocessor directives
 #include <stdio.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -23,13 +24,13 @@ int main(void)
     server_t *addr_local = get_server("CUSTOMER_IP_ACCEPT_UNICAST", "CUSTOMER_PORT", IPPROTO_TCP);
 
     // Initialize socket
-    int sd = socket(AF_INET, SOCK_STREAM, addr_local->protocol);
+    int64_t sd = socket(AF_INET, SOCK_STREAM, addr_local->protocol);
     if (sd < 0)
     {
-        printf("%lu: Unable to create socket\n", time(NULL));
-        return 10;
+        perror("Error: Cannot create socket: ");
+        return 1;
     }
-    printf("%lu: Socket created successfully\n", time(NULL));
+    printf("%s: Socket created successfully\n", get_human_readable_time());
 
     // Initialize message buffer
     char server_message[MAX_MSG_LEN], client_message[MAX_MSG_LEN];
@@ -38,37 +39,54 @@ int main(void)
 
     // Initialize server address (Specifically, what we are listen to)
     struct sockaddr_in server_addr;
+    memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(addr_local->port);
-    server_addr.sin_addr.s_addr = inet_addr(addr_local->ip);
+    if (inet_pton(AF_INET, addr_local->ip, &server_addr.sin_addr) < 0)
+    {
+        perror("Error: Uncompatible IP Address: ");
+        return 2;
+    }
+
+    // Allow reusing IP address to cater for process crashes/restarts
+    uint64_t so_reuseaddr = 1;
+    if (setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, &so_reuseaddr, sizeof(so_reuseaddr)) < 0)
+    {
+        perror("Error: Cannot set socket option: ");
+        return 3;
+    }
 
     // Bind to the set port and IP:
     if (bind(sd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
     {
-        printf("%lu: Couldn't bind to the port.\n", time(NULL));
-        return 11;
+        perror("Error: Cannot bind socket: ");
+        return 4;
     }
-    printf("Done with binding of %lu/%lu at %s\n",
+    printf("%s, Done with binding of %lu/%lu at %s\n",
+           get_human_readable_time(),
            addr_local->port,
            addr_local->protocol,
            addr_local->ip);
 
     // Listen for incoming connections
-    if (listen(sd, 1) < 0)
+    if (listen(sd, LISTENQ) < 0)
     {
-        printf("%lu: Unable to listen on %s at %lu/%lu.\n", time(NULL), addr_local->ip, addr_local->port, addr_local->protocol);
-        return 12;
+        perror("Error: Cannot listen on socket: ");
+        return 5;
     }
-    printf("%lu: Start Listening on %s at %lu/%lu.\n", time(NULL), addr_local->ip, addr_local->port, addr_local->protocol);
+    printf("%s: Start Listening on %s at %lu/%lu.\n",
+           get_human_readable_time(),
+           addr_local->ip,
+           addr_local->port, addr_local->protocol);
 
     // Setup connection to Redis
     redisContext *red_con = redisConnect(addr_redis->ip, addr_redis->port);
     if (red_con != NULL && red_con->err)
     {
-        printf("%lu: Error: %s\n", time(NULL), red_con->errstr);
+        printf("%s: Error: %s\n", get_human_readable_time(), red_con->errstr);
         return 19;
     }
-    printf("%lu: Connected to Redis\n", time(NULL));
+    printf("%s: Connected to Redis\n", get_human_readable_time());
 
     // Listen to incoming connections
     while (1)
@@ -79,42 +97,70 @@ int main(void)
         int64_t csd = accept(sd, (struct sockaddr *)&client_addr, &client_size);
         if (csd < 0)
         {
-            printf("%lu: Unable to accept connection on %s at %lu/%lu.\n", time(NULL), addr_local->ip, addr_local->port, addr_local->protocol);
+            perror("Error: Cannot accept connection on socket: ");
             return 13;
         }
-        printf("%lu: Recived executed order notification from %s on %i/%lu\n", time(NULL), inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port), addr_local->protocol);
+
+        // Get exchange IP
+        char exchange_ip[INET_ADDRSTRLEN];
+        memset(exchange_ip, '\0', sizeof(exchange_ip));
+        if (inet_ntop(AF_INET, &(client_addr.sin_addr), exchange_ip, INET_ADDRSTRLEN) == NULL)
+        {
+            perror("Error: Cannot get IP Address of exchange: ");
+            return 8;
+        }
+
+        printf("%s: Recived executed order notification from %s on %i/%lu\n",
+               get_human_readable_time(),
+               exchange_ip,
+               ntohs(client_addr.sin_port),
+               addr_local->protocol);
 
         // Read message from exchange
         if (recv(csd, client_message, sizeof(client_message), 0) < 0)
         {
-            printf("%lu: Couldn't receive\n", time(NULL));
+            perror("Error: Cannot receive message: ");
             return 14;
         }
-        printf("%lu: Order from exchange: %s\n", time(NULL), client_message);
+        printf("%s: Order from exchange: %s\n",
+               get_human_readable_time(),
+               client_message);
 
         // Deserialize message
         order_t *order = deserialize_exhange_confirmation(client_message);
 
         // Send response to client
-        strncpy(server_message, client_message, sizeof(server_message));
+        memcpy(server_message, client_message, sizeof(server_message));
         if (send(csd, server_message, strlen(server_message), 0) < 0)
         {
-            printf("%lu: Can't send response to exchange\n", time(NULL));
-            return 15;
+            perror("Error: Cannot send message: ");
+            free(order);
+            goto cleanup;
         }
-        printf("%lu: Confirmation send to exchange %s:%hu/%lu\n", time(NULL), inet_ntoa(client_addr.sin_addr), htons(client_addr.sin_port), addr_local->protocol);
+        printf("%s: Confirmation send to exchange %s:%hu/%lu\n",
+               get_human_readable_time(),
+               exchange_ip,
+               htons(client_addr.sin_port),
+               addr_local->protocol);
 
         // Close client socket
         close(csd);
 
         // Update Redis
-        uint64_t result_redis_process = process_completed_order_redis(red_con, order);
+        if (process_completed_order_redis(red_con, order) < 0)
+        {
+            perror("Error: Cannot process Redis data: ");
+            free(order);
+            goto cleanup;
+        }
 
         // Cleanup
         memset(server_message, '\0', sizeof(server_message));
         memset(client_message, '\0', sizeof(client_message));
         free(order);
     }
+
+cleanup:
 
     // Close socket
     close(sd);

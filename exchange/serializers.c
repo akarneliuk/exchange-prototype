@@ -8,12 +8,13 @@
 
 // Local code
 #include "serializers.h"
+#include "helper.h"
 
 // Define aux functions
 order_t *deserialize_order_wire(char *message, uint64_t oid)
 {
     // Initialize result
-    order_t *order = malloc(sizeof(order_t));
+    order_t *order = calloc(1, sizeof(order_t));
 
     // Initialize resources for parsing
     uint64_t n = strlen(message);
@@ -42,12 +43,12 @@ order_t *deserialize_order_wire(char *message, uint64_t oid)
             else if (c == 1)
             {
 
-                order->t_client = atol(buf);
+                order->t_client = strtol(buf, NULL, 10);
             }
             // Operation
             else if (c == 2)
             {
-                order->operation = atoi(buf);
+                order->operation = strtol(buf, NULL, 10);
             }
             // Symbol
             else if (c == 3)
@@ -76,11 +77,11 @@ order_t *deserialize_order_wire(char *message, uint64_t oid)
         }
     }
     // Price
-    order->price = atof(buf);
+    order->price = strtof(buf, NULL);
 
     // Set server-side data and default fields
     order->oid = oid;
-    order->t_server = time(NULL);
+    order->t_server = get_time_nanoseconds_since_midnight(get_time_nanoseconds_midnight());
     order->next = NULL;
     order->previous = NULL;
 
@@ -110,7 +111,7 @@ order_t *deserialize_order_redis(redisContext *red_con, char *redis_list)
         order_t *head = malloc(sizeof(order_t));
         if (head == NULL)
         {
-            printf("ERROR: Cannot allocate memory\n");
+            perror("ERROR: Cannot allocate memory\n");
             free(head);
             exit(1);
         }
@@ -147,7 +148,7 @@ order_t *deserialize_order_redis(redisContext *red_con, char *redis_list)
             if (i != red_rep1->elements - 1)
             {
                 // Create new end node
-                order_t *new_order = malloc(sizeof(order_t));
+                order_t *new_order = calloc(1, sizeof(order_t));
 
                 //  Update tail to point to new order
                 tail->next = new_order;
@@ -192,11 +193,11 @@ cid_ip_t *deserialize_cid_ip_redis(redisContext *red_con, char *redis_list)
     {
         // Get customer ID
         tail->cid = calloc(37, sizeof(char));
-        strncpy(tail->cid, red_rep1->element[i]->str, 36);
+        memcpy(tail->cid, red_rep1->element[i]->str, 36);
 
         // Get IP
         tail->ip = calloc(16, sizeof(char));
-        strncpy(tail->ip, red_rep1->element[i + 1]->str, 15);
+        memcpy(tail->ip, red_rep1->element[i + 1]->str, 15);
 
         // Allocate memory for new node only if this is not the last element
         if (i != red_rep1->elements - 2)

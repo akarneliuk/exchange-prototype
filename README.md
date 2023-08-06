@@ -184,3 +184,13 @@ After the course was finished, it was decided to continue the development of the
 - Replace `malloc()` with `calloc()` to initialize the memory with zeros where appropriate.
 - Add `memset()` upon all structs initialization to zero all values.
 - Rename `tape` to `market_data` to be more consistent with the terminology.
+- Migrated from `clang` to `gcc` as that seem to be a standard for C development.
+- Added `SO_REUSEADDR` to the socket options to allow the socket to be reused for TCP servers
+
+### after-cs50-2 sprint
+- Add `shutdown()` to close the socket properly for TCP sessions.
+- Use `poll()` on `exec` to send data to the clients.
+- Split `order` into `order_gateway` (user-facing application) and `trading_unit` (matching engine part).
+
+### after-cs50-3 sprint
+- Implement `Nasdaq Basic` protocol to provide the market_data to the clients.

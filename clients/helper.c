@@ -47,15 +47,15 @@ uint64_t get_operation(char *op)
         - 1 for buy operation
         - 2 for cancel operation
     */
-    if (strncmp(op, "buy", 3) == 0)
+    if (memcmp(op, "buy", 3) == 0)
     {
         return 1;
     }
-    else if (strncmp(op, "sell", 4) == 0)
+    else if (memcmp(op, "sell", 4) == 0)
     {
         return 0;
     }
-    else if (strncmp(op, "cancel", 6) == 0)
+    else if (memcmp(op, "cancel", 6) == 0)
     {
         return 2;
     }
@@ -70,25 +70,25 @@ server_t *get_server(char *env_ip, char *env_port, uint64_t protocol)
     /* Helper function to get server details from environment variables*/
 
     // Allocate memory for server
-    server_t *server = malloc(sizeof(server_t));
+    server_t *server = calloc(1, sizeof(server_t));
 
     // Get server IP
     char *ip = getenv(env_ip);
     if (ip == NULL)
     {
-        printf("%s: Load error: EXCHANGE_ORDER_IP environment variable not set\n", get_human_readable_time());
+        perror("Error: Cannot allocate memory: ");
         exit(1);
     }
-    strncpy(server->ip, ip, 15);
+    memcpy(server->ip, ip, 15);
 
     // Get server port
     char *port = getenv(env_port);
     if (port == NULL)
     {
-        printf("%s: Load error: EXCHANGE_ORDER_PORT environment variable not set\n", get_human_readable_time());
+        perror("Error: Cannot allocate memory: ");
         exit(1);
     }
-    server->port = atoi(port);
+    server->port = strtol(port, NULL, 10);
 
     // Set the protocol
     server->protocol = protocol;
@@ -161,7 +161,7 @@ order_t *get_orders_from_tape(char *tape)
                 order_t *new_order = malloc(sizeof(order_t));
                 if (new_order == NULL)
                 {
-                    printf("%s: Unable to allocate memory for order\n", get_human_readable_time());
+                    perror("Error: Cannot allocate memory: ");
                     free_order_list(head);
                     return NULL;
                 }
@@ -216,13 +216,18 @@ int64_t add_order_to_redis(redisContext *red_con, order_t *order, uint64_t my_or
 
     if (red_rep1->str != NULL)
     {
-        printf("%lu: Unable to create order %lu details in Redis: %s\n", time(NULL), order->oid, red_rep1->str);
+        printf("%s: Unable to create order %lu details in Redis: %s\n",
+               get_human_readable_time(),
+               order->oid,
+               red_rep1->str);
         freeReplyObject(red_rep1);
         return -1;
     }
     else
     {
-        printf("%lu: Order %lu details are created in Redis.\n", time(NULL), order->oid);
+        printf("%s: Order %lu details are created in Redis.\n",
+               get_human_readable_time(),
+               order->oid);
         freeReplyObject(red_rep1);
     }
 
@@ -250,13 +255,18 @@ int64_t add_order_to_redis(redisContext *red_con, order_t *order, uint64_t my_or
     redisReply *red_rep2 = redisCommand(red_con, redis_request);
     if (red_rep2->str != NULL)
     {
-        printf("%lu: Unable to add order %lu to the active queue in Redis: %s\n", time(NULL), order->oid, red_rep2->str);
+        printf("%s: Unable to add order %lu to the active queue in Redis: %s\n",
+               get_human_readable_time(),
+               order->oid,
+               red_rep2->str);
         freeReplyObject(red_rep2);
         return -1;
     }
     else
     {
-        printf("%lu: Order %lu is added to the active queue in Redis.\n", time(NULL), order->oid);
+        printf("%s: Order %lu is added to the active queue in Redis.\n",
+               get_human_readable_time(),
+               order->oid);
     }
     freeReplyObject(red_rep2);
 
@@ -273,13 +283,16 @@ int64_t delete_inactive_quotes_from_redis(redisContext *red_con, uint64_t last_t
                                         REDIS_CUSTOMER_ALL_ORDERS);
     if (red_rep1->str != NULL)
     {
-        printf("%lu: Unable to get orders' list in Redis: %s\n", time(NULL), red_rep1->str);
+        printf("%s: Unable to get orders' list in Redis: %s\n",
+               get_human_readable_time(),
+               red_rep1->str);
         freeReplyObject(red_rep1);
         return -1;
     }
     else
     {
-        printf("%lu: Orders' list is collected in Redis.\n", time(NULL));
+        printf("%s: Orders' list is collected in Redis.\n",
+               get_human_readable_time());
     }
 
     // Loop through all orders
@@ -297,13 +310,17 @@ int64_t delete_inactive_quotes_from_redis(redisContext *red_con, uint64_t last_t
                                                 red_rep1->element[i]->str);
             if (red_rep2->str != NULL)
             {
-                printf("%lu: Unable to delete order fro, Redis: %s\n", time(NULL), red_rep2->str);
+                printf("%s: Unable to delete order fro, Redis: %s\n",
+                       get_human_readable_time(),
+                       red_rep2->str);
                 freeReplyObject(red_rep2);
                 return -1;
             }
             else
             {
-                printf("%lu: Order %s is deleted in Redis.\n", time(NULL), red_rep1->element[i]->str);
+                printf("%s: Order %s is deleted in Redis.\n",
+                       get_human_readable_time(),
+                       red_rep1->element[i]->str);
             }
 
             // Cleanup
@@ -356,7 +373,9 @@ void print_order_from_redis(uint64_t my_or_all)
     redisReply *red_rep1 = redisCommand(red_con, redis_request);
     if (red_rep1->str != NULL)
     {
-        printf("%lu: Unable to get orders' list in Redis: %s\n", time(NULL), red_rep1->str);
+        printf("%s: Unable to get orders' list in Redis: %s\n",
+               get_human_readable_time(),
+               red_rep1->str);
         freeReplyObject(red_rep1);
         redisFree(red_con);
         free(addr_redis);
@@ -372,7 +391,9 @@ void print_order_from_redis(uint64_t my_or_all)
 
         if (red_rep2->str != NULL)
         {
-            printf("%lu: Unable to get order %s ifrom Redis.\n", time(NULL), red_rep1->str);
+            printf("%s: Unable to get order %s ifrom Redis.\n",
+                   get_human_readable_time(),
+                   red_rep1->str);
             freeReplyObject(red_rep1);
             redisFree(red_con);
             free(addr_redis);
@@ -451,7 +472,7 @@ order_t *deserialize_exhange_confirmation(char *msg)
     return order;
 }
 
-uint64_t process_completed_order_redis(redisContext *red_con, order_t *order)
+int64_t process_completed_order_redis(redisContext *red_con, order_t *order)
 {
     /* Helper function to process the order to redis */
 
@@ -462,7 +483,7 @@ uint64_t process_completed_order_redis(redisContext *red_con, order_t *order)
     {
         printf("%s: Unable to delete order %lu from mine in Redis: %s\n", get_human_readable_time(), order->oid, red_rep1->str);
         freeReplyObject(red_rep1);
-        return 1;
+        return -1;
     }
     else
     {

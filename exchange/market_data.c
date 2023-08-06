@@ -108,7 +108,7 @@ int main(int argc, char *argv[])
         else
         {
             sprintf(msg, "%lu:%lu:", msg_counter, get_time_nanoseconds_since_midnight(time_midnight));
-            for (int i = 0; i < red_reply->elements; i++)
+            for (uint64_t i = 0; i < red_reply->elements; i++)
             {
                 redisReply *redis_reply_order = redisCommand(red_con, "HVALS %s:%s", REDIS_EXCHANGE_ORDER_PREFIX, red_reply->element[i]->str);
 
@@ -119,7 +119,7 @@ int main(int argc, char *argv[])
                 // Add order details to the message if provided
                 if (redis_reply_order->elements == 7)
                 {
-                    for (int j = 3; j < redis_reply_order->elements; j++)
+                    for (uint64_t j = 3; j < redis_reply_order->elements; j++)
                     {
                         strncat(msg, redis_reply_order->element[j]->str, strlen(redis_reply_order->element[j]->str));
 

@@ -429,8 +429,14 @@ void match_trade(trading_trie_t *tt, order_t *order, redisContext *red_con, bool
     // If there are matched orders, push them to executed_orders in Redis
     if (is_matched)
     {
-        uint64_t mr1 = add_order_to_redis_details(red_con, order);
-        uint64_t mr2 = move_orders_to_exec_queue_redis(red_con, executed_orders);
+        if (add_order_to_redis_details(red_con, order) > 0)
+        {
+            perror("Error: Cannot add Redis order details: ");
+        }
+        if (move_orders_to_exec_queue_redis(red_con, executed_orders) > 0)
+        {
+            perror("Error: Cannot move redis order to executed queue: ");
+        }
     }
 
     // Print list of executed orders for debug purposes
