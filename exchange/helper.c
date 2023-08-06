@@ -46,8 +46,8 @@ void update_cid_ip(cid_ip_t *cid_ip_map, char *cid, char *ip, redisContext *red_
     // Check if the existing mapping is blank
     if (head->cid[0] == '\0')
     {
-        strcpy(head->cid, cid);
-        strcpy(head->ip, ip);
+        memcpy(head->cid, cid, 36);
+        memcpy(head->ip, ip, 15);
 
         is_updated = true;
     }
@@ -55,7 +55,7 @@ void update_cid_ip(cid_ip_t *cid_ip_map, char *cid, char *ip, redisContext *red_
     else
     {
         // Check if the current client id is this
-        while (strcmp(head->cid, cid) != 0)
+        while (memcmp(head->cid, cid, 36) != 0)
         {
             // Check if the next mapping doesn't exist
             if (head->next == NULL)
@@ -65,11 +65,11 @@ void update_cid_ip(cid_ip_t *cid_ip_map, char *cid, char *ip, redisContext *red_
 
                 // Set Customer ID in new mapping
                 head->next->cid = calloc(37, sizeof(char));
-                strncpy(head->next->cid, cid, 36);
+                memcpy(head->next->cid, cid, 36);
 
                 // Set Customer IP in new mapping
                 head->next->ip = calloc(16, sizeof(char));
-                strncpy(head->next->ip, ip, 15);
+                memcpy(head->next->ip, ip, 15);
 
                 head->next->next = NULL;
 
@@ -89,6 +89,7 @@ void update_cid_ip(cid_ip_t *cid_ip_map, char *cid, char *ip, redisContext *red_
 
         // Update the mapping in Redis
         redisReply *red_rep = redisCommand(red_con, "HSET %s %s %s", REDIS_EXCHANGE_C2IP, cid, ip);
+        freeReplyObject(red_rep);
     }
 }
 
@@ -190,7 +191,12 @@ server_t *get_server(char *env_ip, char *env_port, uint64_t protocol)
     /* Helper function to get server details from environment variables*/
 
     // Allocate memory for server
-    server_t *server = malloc(sizeof(server_t));
+    server_t *server = calloc(1, sizeof(server_t));
+    if (server == NULL)
+    {
+        printf("%lu: Unable to allocate memory for server\n", time(NULL));
+        exit(100);
+    }
 
     // Get server IP
     char *ip = getenv(env_ip);
@@ -199,7 +205,7 @@ server_t *get_server(char *env_ip, char *env_port, uint64_t protocol)
         printf("EXCHANGE_ORDER_IP environment variable not set\n");
         exit(1);
     }
-    strncpy(server->ip, ip, 15);
+    memcpy(server->ip, ip, 15);
 
     // Get server port
     char *port = getenv(env_port);
@@ -208,7 +214,8 @@ server_t *get_server(char *env_ip, char *env_port, uint64_t protocol)
         printf("EXCHANGE_ORDER_PORT environment variable not set\n");
         exit(1);
     }
-    server->port = atoi(port);
+    server->port = strtol(port, NULL, 10);
+    // server->port = atoi(port);
 
     // Set the protocol
     server->protocol = protocol;
@@ -268,4 +275,42 @@ uint64_t move_orders_to_exec_queue_redis(redisContext *red_con, order_t *orders)
 
     // return success
     return 0;
+}
+
+int64_t get_time_nanoseconds_midnight()
+{
+    /* Helper function to get time in nanoseconds at the midnight this day.
+       Return `-1` in case of errors.*/
+
+    // Get current time in struct
+    time_t now = time(NULL);
+    struct tm now_st = *localtime(&now);
+
+    // Erase hours, minutes, seconds
+    now_st.tm_hour = 0;
+    now_st.tm_min = 0;
+    now_st.tm_sec = 0;
+
+    // Create timestamp in seconds for midnight
+    time_t midnight = mktime(&now_st);
+
+    // Return timestamp
+    return midnight * 1000000000;
+}
+
+int64_t get_time_nanoseconds_since_midnight(int64_t midnigt)
+{
+    /* Helper function to get time in nanoseconds since midnight, take timestamp of midnight as input.
+       Return `-1` in case of errors.*/
+
+    struct timespec tv;
+    memset(&tv, 0, sizeof(tv));
+
+    if (clock_gettime(CLOCK_REALTIME, &tv))
+    {
+        perror("Error: Cannot execute clock_gettime: ");
+        return -1;
+    }
+
+    return tv.tv_sec * 1000000000 + tv.tv_nsec - midnigt;
 }

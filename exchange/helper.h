@@ -15,3 +15,5 @@ uint64_t add_order_to_redis_details(redisContext *red_con, order_t *order);
 uint64_t add_order_to_redis_hash(redisContext *red_con, order_t *order);
 uint64_t move_orders_to_exec_queue_redis(redisContext *red_con, order_t *orders);
 server_t *get_server(char *env_ip, char *env_port, uint64_t protocol);
+int64_t get_time_nanoseconds_midnight();
+int64_t get_time_nanoseconds_since_midnight(int64_t midnigt);

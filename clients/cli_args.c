@@ -1,5 +1,6 @@
 // Preprocessor directives
 #include <stdio.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -19,7 +20,7 @@ order_t *process_cli_args(int argc, char *argv[])
     }
 
     // Print help
-    else if (argc == 2 && strncmp(argv[1], "help", 4) == 0)
+    else if (argc == 2 && memcmp(argv[1], "help", 4) == 0)
     {
         printf("The following operations are available in the client:\n");
 
@@ -42,7 +43,7 @@ order_t *process_cli_args(int argc, char *argv[])
     }
 
     // Print the content of all quotes
-    else if (argc == 2 && strncmp(argv[1], "list", 6) == 0)
+    else if (argc == 2 && memcmp(argv[1], "list", 4) == 0)
     {
         // Print all the orders
         printf("All orders listed now:\n");
@@ -51,7 +52,7 @@ order_t *process_cli_args(int argc, char *argv[])
     }
 
     // Print the content of the own quotes
-    else if (argc == 3 && strncmp(argv[1], "list", 6) == 0 && strncmp(argv[2], "--my", 4) == 0)
+    else if (argc == 3 && memcmp(argv[1], "list", 4) == 0 && memcmp(argv[2], "--my", 4) == 0)
     {
         // Print only own orders
         printf("All YOUR orders listed now:\n");
@@ -60,45 +61,55 @@ order_t *process_cli_args(int argc, char *argv[])
     }
 
     // Return order to buy/sell shares
-    else if (argc == 5 && (strncmp(argv[1], "buy", 3) == 0 || strncmp(argv[1], "sell", 4) == 0))
+    else if (argc == 5 && (memcmp(argv[1], "buy", 3) == 0 || memcmp(argv[1], "sell", 4) == 0))
     {
 
         // Check that amount is positive integer
-        if (atoi(argv[3]) <= 0)
+        if (strtol(argv[3], NULL, 10) <= 0)
         {
             printf("ERROR: AMOUNT should be positive integer\n");
             exit(1);
         }
 
         // Check that price is positive float
-        if (atof(argv[4]) <= 0)
+        if (strtof(argv[4], NULL) <= 0)
         {
             printf("ERROR: PRICE should be positive float\n");
             exit(1);
         }
 
-        order_t *order = malloc(sizeof(order_t));
+        order_t *order = calloc(1, sizeof(order_t));
+        if (order == NULL)
+        {
+            printf("ERROR: Unable to allocate memory for order\n");
+            exit(2);
+        }
         memset(order->symbol, '\0', sizeof(order->symbol));
 
         order->t_client = time(NULL);
         order->operation = get_operation(argv[1]);
-        order->quantity = atoi(argv[3]);
-        order->price = atof(argv[4]);
+        order->quantity = (int32_t)strtol(argv[3], NULL, 10);
+        order->price = strtof(argv[4], NULL);
 
         // Copy no more than 10 characters
         uint64_t copy_len = strlen(argv[2]) < 10 ? strlen(argv[2]) : 10;
-        strncpy(order->symbol, argv[2], copy_len);
+        memcpy(order->symbol, argv[2], copy_len);
 
         return order;
     }
 
     // Return order to cancel
-    else if (argc == 3 && strncmp(argv[1], "cancel", 6) == 0 && atoi(argv[2]) > 0)
+    else if (argc == 3 && memcmp(argv[1], "cancel", 6) == 0 && strtol(argv[2], NULL, 10) > 0)
     {
-        order_t *order = malloc(sizeof(order_t));
+        order_t *order = calloc(1, sizeof(order_t));
+        if (order == NULL)
+        {
+            printf("ERROR: Unable to allocate memory for order\n");
+            exit(2);
+        }
         order->t_client = time(NULL);
         order->operation = get_operation(argv[1]);
-        order->oid = atol(argv[2]);
+        order->oid = strtol(argv[2], NULL, 10);
 
         return order;
     }
