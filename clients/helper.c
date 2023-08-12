@@ -5,6 +5,7 @@
 #include <string.h>
 #include <uuid/uuid.h>
 #include <arpa/inet.h>
+#include <byteswap.h>
 
 // Local code
 #include "helper.h"
@@ -495,6 +496,27 @@ int64_t process_completed_order_redis(redisContext *red_con, order_t *order)
     return 0;
 }
 
+order_t *deserialize_exhange_confirmation_2(struct order_gateway_request_message_t *ogm)
+{
+    /* Helper function to conver string to struct*/
+    order_t *order = calloc(1, sizeof(order_t));
+    if (order == NULL)
+    {
+        printf("%s: Unable to allocate memory for order\n", get_human_readable_time());
+        return NULL;
+    }
+
+    // Read data from packet
+    order->t_server = bswap_64(ogm->ts_executed);
+    order->oid = bswap_64(ogm->order_id);
+
+    return order;
+}
+
+//
+// Functions dealing with time
+//
+
 char *get_human_readable_time()
 {
     /* Helper function to get human readable time*/
@@ -503,4 +525,42 @@ char *get_human_readable_time()
     time_str[strlen(time_str) - 1] = '\0';
 
     return time_str;
+}
+
+int64_t get_time_nanoseconds_midnight()
+{
+    /* Helper function to get time in nanoseconds at the midnight this day.
+       Return `-1` in case of errors.*/
+
+    // Get current time in struct
+    time_t now = time(NULL);
+    struct tm now_st = *localtime(&now);
+
+    // Erase hours, minutes, seconds
+    now_st.tm_hour = 0;
+    now_st.tm_min = 0;
+    now_st.tm_sec = 0;
+
+    // Create timestamp in seconds for midnight
+    time_t midnight = mktime(&now_st);
+
+    // Return timestamp
+    return midnight * 1000000000;
+}
+
+int64_t get_time_nanoseconds_since_midnight(int64_t midnigt)
+{
+    /* Helper function to get time in nanoseconds since midnight, take timestamp of midnight as input.
+       Return `-1` in case of errors.*/
+
+    struct timespec tv;
+    memset(&tv, 0, sizeof(tv));
+
+    if (clock_gettime(CLOCK_REALTIME, &tv))
+    {
+        perror("Error: Cannot execute clock_gettime: ");
+        return -1;
+    }
+
+    return tv.tv_sec * 1000000000 + tv.tv_nsec - midnigt;
 }

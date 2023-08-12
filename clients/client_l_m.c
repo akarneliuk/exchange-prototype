@@ -22,8 +22,8 @@
 int main(void)
 {
     // Get connection details
-    server_t *addr_mcast = get_server("EXCHANGE_TAPE_IP", "EXCHANGE_TAPE_PORT", IPPROTO_UDP);
-    server_t *addr_mcast_local = get_server("CUSTOMER_IP_ACCEPT_MULTICAST", "EXCHANGE_TAPE_PORT", IPPROTO_UDP);
+    server_t *addr_mcast = get_server("EXCHANGE_MARKET_DATA_IP_MCAST_GROUP", "EXCHANGE_MARKET_DATA_L4_PORT", IPPROTO_UDP);
+    server_t *addr_mcast_local = get_server("CUSTOMER_IP_ACCEPT_MCAST", "EXCHANGE_MARKET_DATA_L4_PORT", IPPROTO_UDP);
     server_t *addr_redis = get_server("REDIS_IP", "REDIS_PORT", IPPROTO_TCP);
 
     // Initialize socket

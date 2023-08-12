@@ -188,9 +188,11 @@ After the course was finished, it was decided to continue the development of the
 - Added `SO_REUSEADDR` to the socket options to allow the socket to be reused for TCP servers
 
 ### after-cs50-2 sprint
-- Add `shutdown()` to close the socket properly for TCP sessions.
+- Add `shutdown()` to close the socket properly for TCP sessions. **DONE**
 - Use `poll()` on `exec` to send data to the clients.
 - Split `order` into `order_gateway` (user-facing application) and `trading_unit` (matching engine part).
+- Build a single client `client_receiver`, which listens both for multicast and unicast using `poll()`. **DONE**
+- Replace string encoding with structs for sending messages between applications. Data shall be sent in network-byte order, big-endian format. *IN PROGRESS*
 
 ### after-cs50-3 sprint
 - Implement `Nasdaq Basic` protocol to provide the market_data to the clients.

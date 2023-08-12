@@ -8,7 +8,7 @@
 #define REDIS_CUSTOMER_ALL_ORDERS "customer_all_orders"
 #define REDIS_CUSTOMER_MY_ORDERS "customer_my_orders"
 #define REDIS_CUSTOMER_ORDER_PREFIX "c-order"
-#define LISTENQ 100
+#define LISTENQ 10
 
 // Data types
 #ifndef _MY_HEADER_H_
@@ -20,7 +20,7 @@ typedef struct order_t
     uint64_t t_server;
     uint64_t oid;
     char symbol[10];
-    uint64_t operation; // sell = 0, buy = 1, cancel = 2
+    uint64_t operation;
     uint64_t quantity;
     float price;
     struct order_t *next;
@@ -32,5 +32,23 @@ typedef struct server_t
     uint64_t protocol;
     uint64_t port;
 } server_t;
+
+// Message specifications
+typedef struct order_gateway_request_message_t
+{
+    uint64_t order_id;
+    uint64_t ts_placed;
+    uint64_t ts_executed;
+    char status;
+
+} __attribute__((packed)) order_gateway_request_message_t;
+
+typedef struct order_gateway_response_message_t
+{
+    uint64_t order_id;
+    uint64_t ts_ack;
+    char status;
+
+} __attribute__((packed)) order_gateway_response_message_t;
 
 #endif /* _MY_HEADER_H_ */
