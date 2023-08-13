@@ -9,15 +9,32 @@
 #include <sys/socket.h>
 #include <sys/poll.h>
 #include <arpa/inet.h>
-#include <hiredis/hiredis.h>
 #include <linux/in.h>
 #include <errno.h>
 #include <byteswap.h>
+
+// Preprocessor directives : External dependnecy
+#include <hiredis/hiredis.h>
 
 // Local code
 #include "helper.h"
 #include "comm.h"
 
+// Declare funnction prototype
+void process_order_gateway_notification(
+    int64_t sockfd,
+    ssize_t recv_bytes,
+    char *recv_buf,
+    uint64_t time_midnight,
+    redisContext *red_con);
+void process_market_data_feed(
+    struct sockaddr_in *md_addr,
+    ssize_t recv_bytes,
+    char *recv_buf,
+    uint64_t time_midnight,
+    redisContext *red_con);
+
+// Define main function
 int main(void)
 {
     // GENERAL: Get UUID
@@ -26,8 +43,9 @@ int main(void)
 
     // POLL: Declare variables for polling
     struct pollfd open_fds[FOPEN_MAX];
-    uint64_t max_fd_list_id, fd_ind;
-    int64_t fd_ready;
+    uint64_t max_fd_list_id = 0;
+    uint64_t fd_ind = 0;
+    int64_t fd_ready = 0;
 
     // POLL: Initialize list of pollable descriptors
     for (uint64_t i = 0; i < FOPEN_MAX; i++)
@@ -43,6 +61,7 @@ int main(void)
 
     // TCP + UDP: Initialize buffer
     ssize_t recv_bytes = 0;
+
     char recv_buf[MAX_MSG_LEN];
     memset(recv_buf, 0, sizeof(recv_buf));
 
@@ -53,11 +72,12 @@ int main(void)
         perror("Error: TCP: Cannot create socket: ");
         return 1;
     }
-    printf("%s: TCP: socket created successfully\n", get_human_readable_time());
+    printf("%s | GEN | TCP: socket created successfully\n", get_human_readable_time());
 
     // TCP: Initialize server listen address
     struct sockaddr_in tcp_server_addr;
     memset(&tcp_server_addr, 0, sizeof(tcp_server_addr));
+
     tcp_server_addr.sin_family = AF_INET;
     tcp_server_addr.sin_port = htons(addr_ucast_local->port);
     if (inet_pton(tcp_server_addr.sin_family, addr_ucast_local->ip, &tcp_server_addr.sin_addr) < 0)
@@ -67,9 +87,11 @@ int main(void)
     }
 
     // TCP: Prepare for customer socket/address initaialization
-    int64_t tcp_client_fd;
+    int64_t tcp_client_fd = 0;
+
     struct sockaddr_in tcp_client_addr;
     memset(&tcp_client_addr, 0, sizeof(tcp_client_addr));
+
     socklen_t tcp_client_addr_len = sizeof(tcp_client_addr);
 
     // TCP: Allow reusing the IP/Port to be more resilient during crashes
@@ -105,11 +127,12 @@ int main(void)
         perror("Error: UDP: Cannot create socket: ");
         return 1;
     }
-    printf("%s: UDP: socket created successfully\n", get_human_readable_time());
+    printf("%s | GEN | UDP: socket created successfully\n", get_human_readable_time());
 
     // UDP: Initialize server listen address (MCAST Group)
     struct sockaddr_in udp_server_addr;
     memset(&udp_server_addr, 0, sizeof(udp_server_addr));
+
     udp_server_addr.sin_family = AF_INET;
     udp_server_addr.sin_port = htons(addr_mcast_group->port);
     if (inet_pton(udp_server_addr.sin_family, addr_mcast_group->ip, &udp_server_addr.sin_addr) < 0)
@@ -176,10 +199,13 @@ int main(void)
         printf("%s: Error: %s\n", get_human_readable_time(), red_con->errstr);
         return 19;
     }
-    printf("%s: Connected to Redis\n", get_human_readable_time());
+    printf("%s | REDIS | Connected to Redis\n",
+           get_human_readable_time());
 
     // GENERAL: Print confirmation ready to trade
-    printf("Client %s is all set and ready to trade!\n", client_id);
+    printf("%s | GEN | Client %s is all set and ready to trade!\n",
+           get_human_readable_time(),
+           client_id);
 
     // GENERAL: Get midnight time
     uint64_t time_midnight = get_time_nanoseconds_midnight();
@@ -250,12 +276,25 @@ int main(void)
                 // UDP: Process UDP multicast feed
                 if (fd_ind == 1)
                 {
-                    if ((recv_bytes = recv(open_fds[fd_ind].fd, recv_buf, sizeof(recv_buf), 0)) < 0)
+                    // Initialize struct for market data source
+                    struct sockaddr_in md_addr;
+                    memset(&md_addr, 0, sizeof(md_addr));
+                    socklen_t md_addr_len = sizeof(md_addr);
+
+                    if ((recv_bytes = recvfrom(open_fds[fd_ind].fd, recv_buf, sizeof(recv_buf), 0,
+                                               (struct sockaddr *)&md_addr, &md_addr_len)) < 0)
                     {
                         perror("Error: UDP: Cannot receive data");
                         return 9;
                     }
-                    printf("MCAST FROM MARKET_DATA: %s\n", recv_buf);
+
+                    // Process multicast feed
+                    process_market_data_feed(
+                        &md_addr,
+                        recv_bytes,
+                        recv_buf,
+                        time_midnight,
+                        red_con);
 
                     // Cleanup the buffer
                     memset(recv_buf, 0, sizeof(recv_buf));
@@ -289,71 +328,16 @@ int main(void)
                     // TCP: Data received as usual
                     else
                     {
-                        // Read data from exchange
-                        struct order_gateway_request_message_t ogm_input;
-                        memset(&ogm_input, 0, sizeof(ogm_input));
-
-                        // Get exchange IP/port
-                        struct sockaddr_in og_addr;
-                        socklen_t og_addr_len = sizeof(og_addr);
-                        memset(&og_addr, 0, sizeof(og_addr));
-                        if (getsockname(open_fds[fd_ind].fd, (struct sockaddr *)&og_addr, &og_addr_len) < 0)
-                        {
-                            perror("Error: TCP: Cannot get socket addr order gateway");
-                            return 13;
-                        }
-                        char og_ip_readable[INET_ADDRSTRLEN];
-                        memset(og_ip_readable, 0, sizeof(og_ip_readable));
-                        if (inet_ntop(AF_INET, &og_addr.sin_addr, og_ip_readable, INET_ADDRSTRLEN) == NULL)
-                        {
-                            perror("Error: TCP: Uncompatible IP Address: ");
-                            return 2;
-                        }
-                        printf("OG | %s:%i | Received execution notification.\n",
-                               og_ip_readable,
-                               htons(og_addr.sin_port));
-
-                        // Ensure that order gateway message fits the size
-                        if (recv_bytes != sizeof(ogm_input))
-                        {
-                            perror("Error: TCP: Corrupted message from order gateway: ");
-                            return 12;
-                        }
-                        memcpy(&ogm_input, recv_buf, sizeof(ogm_input));
-
-                        // Get orders
-                        order_t *order = deserialize_exhange_confirmation_2(&ogm_input);
-
-                        // Prepare response message
-                        struct order_gateway_response_message_t ogm_output;
-                        memset(&ogm_output, 0, sizeof(ogm_output));
-                        ogm_output.order_id = ogm_input.order_id;
-                        ogm_output.ts_ack = bswap_64(get_time_nanoseconds_since_midnight(time_midnight));
-                        ogm_output.status = 'A';
-
-                        // Send confirmation to order gateway
-                        if (send(open_fds[fd_ind].fd, &ogm_output, sizeof(ogm_output), 0) < 0)
-                        {
-                            perror("Error: TCP: Cannot send message: ");
-                            return 11;
-                        }
-                        printf("OG | %s:%i | Sent acknowledgement.\n",
-                               og_ip_readable,
-                               htons(og_addr.sin_port));
-
-                        // Shutdown the connection
-                        shutdown(open_fds[fd_ind].fd, SHUT_WR);
-
-                        // Update Redis
-                        if (process_completed_order_redis(red_con, order) < 0)
-                        {
-                            perror("Error: TCP Cannot process Redis data: ");
-                            free(order);
-                        }
+                        // Process notification
+                        process_order_gateway_notification(
+                            open_fds[fd_ind].fd,
+                            recv_bytes,
+                            recv_buf,
+                            time_midnight,
+                            red_con);
 
                         // Cleanup
                         memset(recv_buf, 0, sizeof(recv_buf));
-                        free(order);
                     }
                 }
 
@@ -378,4 +362,157 @@ int main(void)
     free(addr_mcast_local);
     free(addr_ucast_local);
     free(addr_redis);
+}
+
+// Define aux functions
+void process_order_gateway_notification(
+    int64_t sockfd,
+    ssize_t recv_bytes,
+    char *recv_buf,
+    uint64_t time_midnight,
+    redisContext *red_con)
+{
+    /* Helper function to process the notification sent from the order execution function */
+
+    // Read data from exchange
+    struct order_gateway_request_message_t ogm_input;
+    memset(&ogm_input, 0, sizeof(ogm_input));
+
+    // Get order gateway IP/port
+    struct sockaddr_in og_addr;
+    socklen_t og_addr_len = sizeof(og_addr);
+    memset(&og_addr, 0, sizeof(og_addr));
+
+    if (getpeername(sockfd, (struct sockaddr *)&og_addr, &og_addr_len) < 0)
+    {
+        perror("Error: TCP: Cannot get socket addr order gateway");
+        exit(13);
+    }
+
+    char og_ip_readable[INET_ADDRSTRLEN];
+    memset(og_ip_readable, 0, sizeof(og_ip_readable));
+
+    if (inet_ntop(AF_INET, &og_addr.sin_addr, og_ip_readable, INET_ADDRSTRLEN) == NULL)
+    {
+        perror("Error: TCP: Uncompatible IP Address: ");
+        exit(2);
+    }
+
+    // Validate packet size
+    if (recv_bytes != sizeof(ogm_input))
+    {
+        perror("Error: TCP: Corrupted message from order gateway: ");
+        exit(12);
+    }
+
+    // Restore packet and convert network byte order to host byte order
+    memcpy(&ogm_input, recv_buf, sizeof(ogm_input));
+    ogm_input.order_id = bswap_64(ogm_input.order_id);
+    ogm_input.ts_placed = bswap_64(ogm_input.ts_placed);
+    ogm_input.ts_executed = bswap_64(ogm_input.ts_executed);
+
+    printf("%s | OG | %s:%i | Order %lu executed at %lu \n",
+           get_human_readable_time(),
+           og_ip_readable,
+           htons(og_addr.sin_port),
+           ogm_input.order_id,
+           ogm_input.ts_executed);
+
+    // Get orders
+    order_t *order = deserialize_exchange_confirmation_2(&ogm_input);
+
+    // Prepare response message and convert host byte order to network byte order
+    struct order_gateway_response_message_t ogm_output;
+    memset(&ogm_output, 0, sizeof(ogm_output));
+    ogm_output.order_id = bswap_64(ogm_input.order_id);
+    ogm_output.ts_ack = bswap_64(get_time_nanoseconds_since_midnight(time_midnight));
+    ogm_output.status = 'A';
+
+    // Send confirmation to order gateway
+    if (send(sockfd, &ogm_output, sizeof(ogm_output), 0) < 0)
+    {
+        perror("Error: TCP: Cannot send message: ");
+        exit(11);
+    }
+    printf("%s | OG | %s:%i | Sent acknowledgement.\n",
+           get_human_readable_time(),
+           og_ip_readable,
+           htons(og_addr.sin_port));
+
+    // Shutdown the connection
+    shutdown(sockfd, SHUT_WR);
+
+    // Update Redis
+    if (process_completed_order_redis(red_con, order) < 0)
+    {
+        perror("Error: TCP Cannot process Redis data: ");
+        free(order);
+    }
+
+    // Cleanup
+    free(order);
+}
+
+void process_market_data_feed(
+    struct sockaddr_in *md_addr,
+    ssize_t recv_bytes,
+    char *recv_buf,
+    uint64_t time_midnight,
+    redisContext *red_con)
+{
+    /* Helper function to process multicast feed from market data*/
+
+    // Get readable market data source
+    char md_ip_readable[INET_ADDRSTRLEN];
+    memset(md_ip_readable, 0, sizeof(md_ip_readable));
+
+    if (inet_ntop(AF_INET, &md_addr->sin_addr, md_ip_readable, INET_ADDRSTRLEN) == NULL)
+    {
+        perror("Error: UDP: Uncompatible IP Address: ");
+        exit(2);
+    }
+
+    printf("%s | MD | %s:%i | MCAST: %s\n",
+           get_human_readable_time(),
+           md_ip_readable,
+           htons(md_addr->sin_port),
+           recv_buf);
+
+    // Parse message
+    order_t *order = get_orders_from_tape(recv_buf);
+
+    // Send update to Redis
+    order_t *head = order;
+    while (head)
+    {
+        // Update orders in Redis
+        if (add_order_to_redis(red_con, head, 0) < 0)
+        {
+            perror("Error: Cannot update quotes: ");
+            exit(8);
+        }
+
+        head = head->next;
+    }
+
+    // Get the last quote time or set 0 if there is no active quote
+    uint64_t last_time;
+    if (order != NULL)
+    {
+        last_time = order->t_server;
+    }
+    else
+    {
+        last_time = 0;
+    }
+
+    // Delete quotes which are gone
+    if (delete_inactive_quotes_from_redis(red_con, last_time) < 0)
+    {
+        perror("Error: Cannot delete obsolte quotes: ");
+        exit(9);
+    }
+
+    // Clean memory for new message
+    free_order_list(order);
 }

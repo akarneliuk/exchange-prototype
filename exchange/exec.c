@@ -65,12 +65,13 @@ int main(void)
 
             // Initialize message buffer
             char server_message[MAX_MSG_LEN], client_message[MAX_MSG_LEN];
-            memset(server_message, '\0', sizeof(server_message));
-            memset(client_message, '\0', sizeof(client_message));
+            memset(server_message, 0, sizeof(server_message));
+            memset(client_message, 0, sizeof(client_message));
 
             // Initialize server address (Destination IP and port)
             struct sockaddr_in server_addr;
             memset(&server_addr, 0, sizeof(server_addr));
+
             server_addr.sin_family = AF_INET;
             server_addr.sin_port = htons(addr_fake_with_port->port);
             if (inet_pton(AF_INET, chead->ip, &server_addr.sin_addr) < 0)
@@ -124,25 +125,19 @@ int main(void)
             ogm_input.order_id = bswap_64(ogm_input.order_id);
             ogm_input.ts_ack = bswap_64(ogm_input.ts_ack);
 
-            printf("%lu: Customer %s response received\n",
+            printf("%lu: Customer %s acknowledgement for order_id %lu received\n",
                    get_time_nanoseconds_since_midnight(time_midnight),
-                   chead->ip);
-
-            printf("OID: %lu <-> %lu\nSTA: %c <-> %c\nTS: %lu <->%lu",
-                   ogm_input.order_id,
-                   bswap_64(ogm_output.order_id),
-                   ogm_input.status,
-                   ogm_output.status,
-                   bswap_64(ogm_input.ts_ack),
-                   bswap_64(ogm_output.ts_executed));
+                   chead->ip,
+                   ogm_input.order_id);
 
             // Compare sent to received message
             // TODO: Add comparisson of timestamps
-            if (ogm_input.order_id == bswap_64(ogm_output.order_id) && ogm_input.status == 'A')
+            if (ogm_input.order_id == bswap_64(ogm_output.order_id) && ogm_input.status == 'A' && ogm_input.ts_ack > bswap_64(ogm_output.ts_executed))
             {
-                printf("%lu: Customer %s acknowledgement is correct.\n",
+                printf("%lu: Customer %s acknowledgement for order_id %lu is correct.\n",
                        get_time_nanoseconds_since_midnight(time_midnight),
-                       chead->ip);
+                       chead->ip,
+                       ogm_input.order_id);
 
                 // Delete entries from Redis
                 redisReply *red_rep = redisCommand(red_con, "HDEL %s %lu",

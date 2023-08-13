@@ -496,7 +496,7 @@ int64_t process_completed_order_redis(redisContext *red_con, order_t *order)
     return 0;
 }
 
-order_t *deserialize_exhange_confirmation_2(struct order_gateway_request_message_t *ogm)
+order_t *deserialize_exchange_confirmation_2(struct order_gateway_request_message_t *ogm)
 {
     /* Helper function to conver string to struct*/
     order_t *order = calloc(1, sizeof(order_t));
@@ -507,8 +507,8 @@ order_t *deserialize_exhange_confirmation_2(struct order_gateway_request_message
     }
 
     // Read data from packet
-    order->t_server = bswap_64(ogm->ts_executed);
-    order->oid = bswap_64(ogm->order_id);
+    order->t_server = ogm->ts_executed;
+    order->oid = ogm->order_id;
 
     return order;
 }
@@ -527,7 +527,7 @@ char *get_human_readable_time()
     return time_str;
 }
 
-int64_t get_time_nanoseconds_midnight()
+uint64_t get_time_nanoseconds_midnight()
 {
     /* Helper function to get time in nanoseconds at the midnight this day.
        Return `-1` in case of errors.*/
@@ -548,7 +548,7 @@ int64_t get_time_nanoseconds_midnight()
     return midnight * 1000000000;
 }
 
-int64_t get_time_nanoseconds_since_midnight(int64_t midnigt)
+uint64_t get_time_nanoseconds_since_midnight(uint64_t midnigt)
 {
     /* Helper function to get time in nanoseconds since midnight, take timestamp of midnight as input.
        Return `-1` in case of errors.*/

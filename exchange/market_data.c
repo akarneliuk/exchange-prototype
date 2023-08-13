@@ -151,7 +151,7 @@ int main(int argc, char *argv[])
         }
 
         // Debug message test
-        printf("Test message: %s\n", msg);
+        printf("Outgoing message: %s\n", msg);
 
         // Cleanup
         free(msg);

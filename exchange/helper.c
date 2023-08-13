@@ -277,7 +277,7 @@ uint64_t move_orders_to_exec_queue_redis(redisContext *red_con, order_t *orders)
     return 0;
 }
 
-int64_t get_time_nanoseconds_midnight()
+uint64_t get_time_nanoseconds_midnight()
 {
     /* Helper function to get time in nanoseconds at the midnight this day.
        Return `-1` in case of errors.*/
@@ -298,7 +298,7 @@ int64_t get_time_nanoseconds_midnight()
     return midnight * 1000000000;
 }
 
-int64_t get_time_nanoseconds_since_midnight(int64_t midnigt)
+uint64_t get_time_nanoseconds_since_midnight(uint64_t midnigt)
 {
     /* Helper function to get time in nanoseconds since midnight, take timestamp of midnight as input.
        Return `-1` in case of errors.*/
@@ -309,7 +309,7 @@ int64_t get_time_nanoseconds_since_midnight(int64_t midnigt)
     if (clock_gettime(CLOCK_REALTIME, &tv))
     {
         perror("Error: Cannot execute clock_gettime: ");
-        return -1;
+        return 0;
     }
 
     return tv.tv_sec * 1000000000 + tv.tv_nsec - midnigt;
