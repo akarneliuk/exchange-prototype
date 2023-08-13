@@ -10,6 +10,7 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <time.h>
+#include <byteswap.h>
 
 // Local code
 #include "helper.h"
@@ -64,12 +65,13 @@ int main(void)
 
             // Initialize message buffer
             char server_message[MAX_MSG_LEN], client_message[MAX_MSG_LEN];
-            memset(server_message, '\0', sizeof(server_message));
-            memset(client_message, '\0', sizeof(client_message));
+            memset(server_message, 0, sizeof(server_message));
+            memset(client_message, 0, sizeof(client_message));
 
             // Initialize server address (Destination IP and port)
             struct sockaddr_in server_addr;
             memset(&server_addr, 0, sizeof(server_addr));
+
             server_addr.sin_family = AF_INET;
             server_addr.sin_port = htons(addr_fake_with_port->port);
             if (inet_pton(AF_INET, chead->ip, &server_addr.sin_addr) < 0)
@@ -85,43 +87,57 @@ int main(void)
                 return 3;
             }
 
-            // Prepare message
-            sprintf(client_message, "%lu:%lu:;", head->t_server, head->oid);
+            // Prepare message to send to customer
+            struct order_gateway_request_message_t ogm_output;
+            memset(&ogm_output, 0, sizeof(ogm_output));
+            ogm_output.order_id = bswap_64(head->oid);
+            ogm_output.ts_placed = bswap_64(head->t_server);
+            ogm_output.ts_executed = bswap_64(get_time_nanoseconds_since_midnight(time_midnight));
+            ogm_output.status = 'E';
 
-            // Send order to exchange
-            if (send(sd, client_message, strlen(client_message), 0) < 0)
+            // Send notification to customer
+            if (send(sd, &ogm_output, sizeof(ogm_output), 0) < 0)
             {
-                printf("%lu: Can't send response to client\n",
-                       get_time_nanoseconds_since_midnight(time_midnight));
+                perror("Error: Cannot send message to customer: ");
                 return 15;
             }
-            printf("%lu: Confirmation send to %s on %lu/%lu, waiting response\n",
+            printf("%lu: Notification sent to %s on %lu/%lu, waiting response\n",
                    get_time_nanoseconds_since_midnight(time_midnight),
                    chead->ip,
                    addr_fake_with_port->port,
                    addr_fake_with_port->protocol);
-            // Receive exchange's response
-            if (recv(sd, server_message, sizeof(server_message), 0) < 0)
+
+            // Receive response from the customer
+            ssize_t recv_bytes;
+            if ((recv_bytes = recv(sd, server_message, sizeof(server_message), 0)) < 0)
             {
-                printf("%lu: Error while receiving server's msg\n",
-                       get_time_nanoseconds_since_midnight(time_midnight));
+                perror("Error: Cannot receive message from customer: ");
                 return 13;
             }
-            printf("%lu: Client's response: %s\n",
+            struct order_gateway_response_message_t ogm_input;
+            memset(&ogm_input, 0, sizeof(ogm_input));
+            if (recv_bytes != sizeof(ogm_input))
+            {
+                perror("Error: TCP: Corrupted message from customer: ");
+                return 12;
+            }
+            memcpy(&ogm_input, server_message, recv_bytes);
+            ogm_input.order_id = bswap_64(ogm_input.order_id);
+            ogm_input.ts_ack = bswap_64(ogm_input.ts_ack);
+
+            printf("%lu: Customer %s acknowledgement for order_id %lu received\n",
                    get_time_nanoseconds_since_midnight(time_midnight),
-                   server_message);
+                   chead->ip,
+                   ogm_input.order_id);
 
             // Compare sent to received message
-            if (strcmp(client_message, server_message) != 0)
+            // TODO: Add comparisson of timestamps
+            if (ogm_input.order_id == bswap_64(ogm_output.order_id) && ogm_input.status == 'A' && ogm_input.ts_ack > bswap_64(ogm_output.ts_executed))
             {
-                printf("%lu: Error: Sent and received messages do not match\n",
-                       get_time_nanoseconds_since_midnight(time_midnight));
-                return 14;
-            }
-            else
-            {
-                printf("%lu: Sent and received messages match\n",
-                       get_time_nanoseconds_since_midnight(time_midnight));
+                printf("%lu: Customer %s acknowledgement for order_id %lu is correct.\n",
+                       get_time_nanoseconds_since_midnight(time_midnight),
+                       chead->ip,
+                       ogm_input.order_id);
 
                 // Delete entries from Redis
                 redisReply *red_rep = redisCommand(red_con, "HDEL %s %lu",
@@ -143,6 +159,12 @@ int main(void)
                            get_time_nanoseconds_since_midnight(time_midnight));
                 }
                 freeReplyObject(red_rep);
+            }
+            else
+            {
+                printf("%lu: Error: Sent and received messages do not match\n",
+                       get_time_nanoseconds_since_midnight(time_midnight));
+                return 14;
             }
 
             // Client has received the message, close connection

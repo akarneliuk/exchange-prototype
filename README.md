@@ -44,6 +44,7 @@ This part contains three application:
 - `client_s`: This is the trading application that allows the user to buy/sell stocks. This application sends the request to the exchange and receives the response if the order was added to the orderbook or not.
 - `client_l_m`: This is the client application that receives the trading market_data from the exchange via IPv4 multicast and updates the local Redis DB with the current offers (operation, symbol, price, quantity).
 - `client_l_u`: This is the client application that receives the unicast notification from the exchange when the order is executed and updates the local Redis DB.
+- `client_receiver`: This is a combined application that receives both multicast and unicast messages from the exchange and updates the local Redis DB as necessary. It is based on Linux `poll` mechanism of multiple file descriptors (sockets).
 
 ###### Communication
 Network communication is a crucial part of this project. Therefore, the followig communication flows were introduced: 
@@ -101,12 +102,13 @@ Prepare the environment variables per the network topology and source them:
 $ tee env.sh << __EOF__
 #!/usr/bin/env bash
 #!/usr/bin/env bash
-export EXCHANGE_ORDER_IP="192.168.51.31"
+export EXCHANGE_ORDER_IP="192.168.1.115"
 export EXCHANGE_ORDER_PORT="11001"
-export EXCHANGE_market_data_IP="239.11.22.33"
-export EXCHANGE_market_data_PORT="11001"
-export EXCHANGE_market_data_SOURCE_IP="192.168.51.31"
-export CUSTOMER_PORT="11002"
+export EXCHANGE_MARKET_DATA_IP_MCAST_GROUP="239.11.22.33"
+export EXCHANGE_MARKET_DATA_L4_PORT="11001"
+export CUSTOMER_L4_PORT="11002"
+export CUSTOMER_IP_ACCEPT_MCAST="192.168.1.115"
+export CUSTOMER_IP_ACCEPT_UCAST="0.0.0.0"
 export REDIS_IP="127.0.0.1"
 export REDIS_PORT="6379"
 __EOF__
@@ -188,9 +190,12 @@ After the course was finished, it was decided to continue the development of the
 - Added `SO_REUSEADDR` to the socket options to allow the socket to be reused for TCP servers
 
 ### after-cs50-2 sprint
-- Add `shutdown()` to close the socket properly for TCP sessions.
-- Use `poll()` on `exec` to send data to the clients.
+- Add `shutdown()` to close the socket properly for TCP sessions for `exec` and `client_receiver`. **DONE**
 - Split `order` into `order_gateway` (user-facing application) and `trading_unit` (matching engine part).
+- Build a single client `client_receiver`, which listens both for multicast and unicast using `poll()`. **DONE**
+- Replace string encoding with structs for sending messages between applications. Data shall be sent in network-byte order, big-endian format. *IN PROGRESS*
+- Normalize all timestamps on exchange to be in nanoseconds from UTC midnight in logs and messages. **DONE**
 
 ### after-cs50-3 sprint
 - Implement `Nasdaq Basic` protocol to provide the market_data to the clients.
+- Integrate `exec` into `order_gateway` to provide the execution of the orders.

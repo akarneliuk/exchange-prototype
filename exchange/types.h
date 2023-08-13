@@ -63,4 +63,22 @@ typedef struct server_t
     uint64_t port;
 } server_t;
 
+// Message specifications
+typedef struct order_gateway_request_message_t
+{
+    uint64_t order_id;
+    uint64_t ts_placed;
+    uint64_t ts_executed;
+    char status;
+
+} __attribute__((packed)) order_gateway_request_message_t;
+
+typedef struct order_gateway_response_message_t
+{
+    uint64_t order_id;
+    uint64_t ts_ack;
+    char status;
+
+} __attribute__((packed)) order_gateway_response_message_t;
+
 #endif /* _MY_HEADER_H_ */
